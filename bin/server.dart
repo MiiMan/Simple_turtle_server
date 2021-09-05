@@ -1,30 +1,22 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:hive/hive.dart';
-import 'package:shelf/shelf.dart';
-import 'package:shelf/shelf_io.dart';
-
-import 'methods.dart';
-import 'services.dart';
-import 'turtle.dart';
+import 'main_server.dart';
+import 'socket_server.dart';
 
 void main(List<String> args) async {
+  StreamController<String> outputStreamController = StreamController();
 
-  late Box<Turtle> box;
+  SocketServer socketServer = SocketServer(InternetAddress.anyIPv4, '4567');
+  MainServer mainServer = MainServer(InternetAddress.anyIPv4, Platform.environment['PORT'] ?? '8080');
 
-  Hive.registerAdapter(TurtleAdapter());
+  await socketServer.start((webSocketChannel) {
+    outputStreamController.stream.listen((event) {
+      webSocketChannel.sink.add(event);
+      print(event);
+    });
+  });
+  await mainServer.start(logStreamController: outputStreamController);
 
-  box = await Hive.openBox('data', path: 'database');
-
-  final Services methods = Services(Methods(box));
-  // Use any available host or container IP (usually `0.0.0.0`).
-  final ip = InternetAddress.anyIPv4;
-
-  // Configure a pipeline that logs requests.
-  final _handler = Pipeline().addMiddleware(logRequests()).addHandler(methods.router);
-
-  // For running in containers, we respect the PORT environment variable.
-  final port = int.parse(Platform.environment['PORT'] ?? '8080');
-  final server = await serve(_handler, ip, port);
-  print('Server listening on port ${server.port}');
 }
+
